@@ -236,14 +236,8 @@ void ATetrisGrid::ClearFullLines()
                     int32 OffsetY = LinesToClear.Num();
                     ProcessedBlocks.Add(Block);  // 処理済みとして記録
 
-                    // 1. ブロック内のすべてのセルの位置を更新
-                    Block->UpdateCellPosition(OffsetY);
-
-                    // 2. ブロックの新しい中心座標を計算
-                    //FVector NewBlockLocation = Block->CalculateNewBlockPosition(OffsetY);
-
-                    // 3. ブロック自体の位置を更新
-                    //Block->SetActorLocation(NewBlockLocation);
+                    // ブロック内のすべてのセルの位置を更新
+                    Block->UpdateCellPosition(LinesToClear);
                 }
             }
         }

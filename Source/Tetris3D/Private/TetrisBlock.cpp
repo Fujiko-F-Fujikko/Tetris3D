@@ -305,41 +305,36 @@ void ATetrisBlock::RemoveCell(FVector2D Cell)
 	}
 }
 
-void ATetrisBlock::UpdateCellPosition(int32 OffsetY)
+void ATetrisBlock::UpdateCellPosition(const TArray<int32>& ClearedLines)
 {
 	TMap<FVector2D, UStaticMeshComponent*> CellMeshMap = GetCellMeshMap();
 
-	// すべてのセルを移動
-	for (auto& Elem : CellMeshMap)
+	for (auto& CellMeshPair : CellMeshMap)
 	{
-		FVector2D OldGridPos = Elem.Key;
-		FVector2D NewGridPos = FVector2D(OldGridPos.X, OldGridPos.Y - OffsetY); // Y軸方向に移動
+		FVector2D& CellPos = CellMeshPair.Key;
+		UStaticMeshComponent* MeshComp = CellMeshPair.Value;
 
-		// StaticMeshComponent の取得
-		UStaticMeshComponent* MeshComp = Elem.Value;
-		if (MeshComp)
+		// このセルが削除された行より上にあるか判定
+		int32 OffsetY = 0;
+		for (int32 ClearedY : ClearedLines)
 		{
-			FVector NewWorldPos = Grid->GridToWorld(NewGridPos);
+			if (CellPos.Y > ClearedY)  // 上にあるセルだけ移動
+			{
+				OffsetY++;
+			}
+		}
+
+		if (OffsetY > 0)
+		{
+			// Y座標をOffsetY分下に移動
+			CellPos.Y -= OffsetY;
+
+			// 視覚的な位置を更新
+			FVector NewWorldPos = Grid->GridToWorld(CellPos);
 			MeshComp->SetWorldLocation(NewWorldPos);
 		}
 	}
 }
-
-FVector ATetrisBlock::CalculateNewBlockPosition(int32 OffsetY)
-{
-	FVector SumPosition = FVector::ZeroVector;
-	TArray<FVector2D> Cells = GetBlockCells(); // ブロック内のセル情報を取得
-
-	for (FVector2D Cell : Cells)
-	{
-		FVector WorldPos = Grid->GridToWorld(FVector2D(Cell.X, Cell.Y - OffsetY)); // 新しい位置
-		SumPosition += WorldPos;
-	}
-
-	FVector NewPosition = SumPosition / Cells.Num(); // セルの重心を新しい位置に
-	return NewPosition;
-}
-
 
 // 下移動
 void ATetrisBlock::MoveDown()

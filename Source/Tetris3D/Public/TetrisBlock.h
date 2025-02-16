@@ -54,9 +54,8 @@ public:
     TArray<FVector2D> GetBlockCells() const;
 	TMap<FVector2D, UStaticMeshComponent*> GetCellMeshMap() const;
 
-    void UpdateCellPosition(int32 OffsetY);
-	void RemoveCell(FVector2D Cell);
-    FVector CalculateNewBlockPosition(int32 OffsetY);
+    void UpdateCellPosition(const TArray<int32>& ClearedLines);
+    void RemoveCell(FVector2D Cell);
 
 private:
     bool bIsLocked = false;  // ÉuÉçÉbÉNÇ™å≈íËÇ≥ÇÍÇΩÇ©Ç«Ç§Ç©
