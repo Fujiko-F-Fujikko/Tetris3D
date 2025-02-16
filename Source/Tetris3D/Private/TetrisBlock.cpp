@@ -320,7 +320,7 @@ void ATetrisBlock::Rotate()
 		FRotator CurrentRotation = GetActorRotation();
 		UE_LOG(LogTemp, Warning, TEXT("Current Rotation: P=%f Y=%f R=%f"), CurrentRotation.Pitch, CurrentRotation.Yaw, CurrentRotation.Roll);
 		// Pitch ‚Ì‚İ‚ğ +90‹ ‰ñ“]
-		AddActorLocalRotation(FRotator(90.f, 0.f, 0.f));
+		AddActorLocalRotation(FRotator(-90.f, 0.f, 0.f));
 		// ‰ñ“]Œã‚Ìó‘Ô‚ğƒƒOo—Í
 		FRotator NewRotation = GetActorRotation();
 		UE_LOG(LogTemp, Warning, TEXT("New Rotation: P=%f Y=%f R=%f"), NewRotation.Pitch, NewRotation.Yaw, NewRotation.Roll);
@@ -344,7 +344,7 @@ void ATetrisBlock::Rotate()
 		{
 			// ¸”s‚µ‚½ê‡AŒ³‚ÌˆÊ’u‚Æ‰ñ“]‚É–ß‚·
 			SetActorLocation(GetActorLocation() - Offset);
-			AddActorLocalRotation(FRotator(-90, 0, 0)); // Y²‰ñ“]
+			AddActorLocalRotation(FRotator(90, 0, 0)); // Y²‰ñ“]
 		}
 	}
 }
