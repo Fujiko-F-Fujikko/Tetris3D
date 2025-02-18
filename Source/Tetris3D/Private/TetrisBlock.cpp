@@ -10,6 +10,12 @@ ATetrisBlock::ATetrisBlock()
 	PrimaryActorTick.bCanEverTick = true;
 	BlockMesh = CreateDefaultSubobject<USceneComponent>(TEXT("BlockMesh"));
 	RootComponent = BlockMesh;
+
+	// **ゴーストブロックのマテリアルを事前ロード**
+	GhostMaterial = TSoftObjectPtr<UMaterial>(FSoftObjectPath(TEXT("Material'/Game/Materials/M_GhostBlock.M_GhostBlock'")));
+
+	// **ゴーストブロックのメッシュを事前ロード**
+	GhostMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("Engine.StaticMesh'/Engine/BasicShapes/Cube.Cube'")));
 }
 
 // 初期化処理
@@ -33,6 +39,11 @@ void ATetrisBlock::BeginPlay()
 			UE_LOG(LogTemp, Error, TEXT("TetrisBlock: Failed to get Grid instance!"));
 		}
 	}
+
+	// ゴーストブロックの初期化
+	InitializeGhostBlocks();
+	UpdateGhostPosition();
+
 }
 
 // 毎フレームの処理（デバッグ用）
@@ -41,30 +52,16 @@ void ATetrisBlock::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
-int32 ATetrisBlock::GetRotationIndex() const
+bool ATetrisBlock::IsGhostMesh(UStaticMeshComponent* MeshComp) const
 {
-	// 現在の回転をクォータニオンで取得
-	FQuat RotationQuat = GetActorQuat();
-
-	// クォータニオンを Yaw, Pitch, Roll の回転角に変換
-	FRotator RotationEuler = RotationQuat.Rotator();
-
-	UE_LOG(LogTemp, Log, TEXT("RotationEuler: %s"), *RotationEuler.ToString());
-
-	// Pitch 成分（Y軸回転）の角度を取得
-	float PitchDegrees = RotationEuler.Pitch;
-
-	// 180度の時も0度になってしまうので
-	if (175.0f <= RotationEuler.Yaw && RotationEuler.Yaw <= 180.0f &&
-		175.0f <= RotationEuler.Roll && RotationEuler.Roll <= 180.0f)
-		PitchDegrees = 180.0f;
-
-	// 近い90度の倍数に丸めて、RotationIndex を決定
-	int32 RotationIndex = (FMath::RoundToInt(PitchDegrees / 90.0f) % 4 + 4) % 4; // 0,1,2,3 のループ
-
-	UE_LOG(LogTemp, Log, TEXT("RotationIndex: %d (Pitch: %f)"), RotationIndex, PitchDegrees);
-
-	return RotationIndex;
+	for (const auto& Pair : GhostBlockMeshes) // TMapをループで走査
+	{
+		if (Pair.Value == MeshComp)  // 値 (UStaticMeshComponent*) が一致するか確認
+		{
+			return true;  // GhostBlock に含まれていたら true を返す
+		}
+	}
+	return false;  // 見つからなければ false
 }
 
 TArray<FVector2D> ATetrisBlock::GetBlockCells() const
@@ -79,6 +76,9 @@ TArray<FVector2D> ATetrisBlock::GetBlockCells() const
 	for (UStaticMeshComponent* MeshComp : MeshComponents)
 	{
 		if (!MeshComp) continue;
+
+		// ゴーストブロックのメッシュなら無視
+		if (IsGhostMesh(MeshComp)) continue;
 
 		// StaticMeshComponent のワールド座標を取得
 		FVector WorldLocation = MeshComp->GetComponentLocation();
@@ -104,6 +104,9 @@ TMap<FVector2D, UStaticMeshComponent*> ATetrisBlock::GetCellMeshMap() const
 	for (UStaticMeshComponent* MeshComp : MeshComponents)
 	{
 		if (!MeshComp) continue;
+
+		// ゴーストブロックのメッシュなら無視
+		if (IsGhostMesh(MeshComp)) continue;
 
 		// StaticMeshComponent のワールド座標を取得
 		FVector WorldLocation = MeshComp->GetComponentLocation();
@@ -145,6 +148,122 @@ void ATetrisBlock::RemoveCell(FVector2D Cell)
 		UE_LOG(LogTemp, Warning, TEXT("Destroy: Block %s has been completely removed"), *GetActorLabel());
 		Destroy();
 	}
+}
+
+void ATetrisBlock::InitializeGhostBlocks()
+{
+	if (!Grid) return; // グリッドが無ければ処理しない
+
+	// **ゴーストブロックのマテリアルをロード**
+	if (!GhostMaterial.IsValid())
+	{
+		GhostMaterial.LoadSynchronous();
+	}
+
+	// **ゴーストブロックのメッシュをロード**
+	if (!GhostMesh.IsValid())
+	{
+		GhostMesh.LoadSynchronous();
+	}
+
+	// 初期状態のブロックセルを取得
+	TArray<FVector2D> InitialCells = GetBlockCells();
+
+	// ゴーストブロックのメッシュも 4 つ作成（セルごとに対応）
+	for (int i = 0; i < InitialCells.Num(); i++)
+	{
+		// 新しい `UStaticMeshComponent` を作成
+		FString GhostMeshName = FString::Printf(TEXT("GhostBlockMesh%d"), i);
+		UStaticMeshComponent* GhostComp = NewObject<UStaticMeshComponent>(this, *GhostMeshName);
+
+		GhostComp->bEditableWhenInherited = true;
+		GhostComp->SetMobility(EComponentMobility::Movable);
+		// ゴーストブロックは衝突判定を無効化し、可視化
+		GhostComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		GhostComp->SetMaterial(0, GhostMaterial.Get());
+		GhostComp->SetStaticMesh(GhostMesh.Get());
+		GhostComp->SetVisibility(true);
+
+		this->AddInstanceComponent(GhostComp);
+		GhostComp->SetupAttachment(RootComponent);
+		GhostComp->RegisterComponent(); // UEのコンポーネントシステムに登録
+
+		// 各セルの座標とメッシュを対応付け
+		GhostBlockMeshes.Add(InitialCells[i], GhostComp);
+	}
+}
+
+void ATetrisBlock::UpdateGhostPosition()
+{
+	if (!Grid) return; // グリッドが無い場合は何もしない
+
+	// 現在のブロックのセル情報を取得（通常ブロックの位置）
+	TArray<FVector2D> BlockCells = GetBlockCells();
+	TArray<FVector2D> GhostCells = BlockCells; // ゴーストブロックの基準
+
+	// ゴーストブロックの最下位置を計算
+	bool CanMove = true;
+	while (CanMove)
+	{
+		for (FVector2D& Cell : GhostCells)
+		{
+			int32 NewY = Cell.Y - 1; // 下に1マス移動
+
+			// 壁または他のブロックに衝突したら停止
+			if (!Grid->IsCellEmpty(Cell.X, NewY))
+			{
+				CanMove = false;
+				break;
+			}
+		}
+
+		// まだ下に移動できるなら全てのセルを下に1マス移動
+		if (CanMove)
+		{
+			for (FVector2D& Cell : GhostCells)
+			{
+				Cell.Y -= 1;
+			}
+		}
+	}
+
+	// ゴーストブロックの各メッシュを更新
+	TMap<FVector2D, UStaticMeshComponent*> NewGhostBlockMeshes;
+	int i = 0;
+	for (const auto& Pair : GhostBlockMeshes)
+	{
+		UStaticMeshComponent* MeshComp = Pair.Value;
+		if (!MeshComp) continue;
+
+		if (i < GhostCells.Num()) // インデックス範囲をチェック
+		{
+			FVector2D NewGridPos = GhostCells[i]; // 新しいセルの位置
+			FVector WorldPos = Grid->GridToWorld(NewGridPos);
+
+			// ゴーストブロックのメッシュ位置を更新
+			MeshComp->SetWorldLocation(WorldPos);
+
+			// 新しいゴーストブロックマップに追加
+			NewGhostBlockMeshes.Add(NewGridPos, MeshComp);
+		}
+		i++;
+	}
+
+	// ゴーストブロックのデータを更新
+	GhostBlockMeshes = MoveTemp(NewGhostBlockMeshes);
+}
+
+void ATetrisBlock::ClearGhostBlocks()
+{
+	for (auto& Pair : GhostBlockMeshes)
+	{
+		if (Pair.Value) // nullptr でないことを確認
+		{
+			Pair.Value->DestroyComponent(); // StaticMeshComponent を削除
+		}
+	}
+
+	GhostBlockMeshes.Empty(); // マップをクリア
 }
 
 void ATetrisBlock::UpdateCellPosition(const TArray<int32>& ClearedLines)
@@ -219,6 +338,8 @@ void ATetrisBlock::MoveDown()
 			Grid->RegisterBlock(GetBlockCells(), this);
 			// ライン消去を実行
 			Grid->ClearFullLines();
+			// ゴーストブロックを削除
+			ClearGhostBlocks();
 
 			//  新しいブロックをスポーン
 			ATetrisGameMode* GameMode = Cast<ATetrisGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
@@ -232,6 +353,9 @@ void ATetrisBlock::MoveDown()
 	}
 	// すべてのマスが 1マス下に移動できるなら、移動を実行
 	SetActorLocation(Grid->GridToWorld(FVector2D(GridPos.X, GridPos.Y - 1)));
+
+	// ゴーストブロックの位置も更新
+	UpdateGhostPosition();
 }
 
 // 左移動
@@ -262,6 +386,9 @@ void ATetrisBlock::MoveLeft()
 
 	FVector2D GridPos = Grid->WorldToGrid(GetActorLocation());
 	SetActorLocation(Grid->GridToWorld(FVector2D(GridPos.X - 1, GridPos.Y)));
+
+	// ゴーストブロックの位置も更新
+	UpdateGhostPosition();
 }
 
 // 右移動
@@ -292,6 +419,9 @@ void ATetrisBlock::MoveRight()
 
 	FVector2D GridPos = Grid->WorldToGrid(GetActorLocation());
 	SetActorLocation(Grid->GridToWorld(FVector2D(GridPos.X + 1, GridPos.Y)));
+
+	// ゴーストブロックの位置も更新
+	UpdateGhostPosition();
 }
 
 void ATetrisBlock::Rotate()
@@ -345,6 +475,11 @@ void ATetrisBlock::Rotate()
 			// 失敗した場合、元の位置と回転に戻す
 			SetActorLocation(GetActorLocation() - Offset);
 			AddActorLocalRotation(FRotator(90, 0, 0)); // Y軸回転
+		}
+		else
+		{
+			// 成功した場合、ゴーストブロックの位置も更新
+			UpdateGhostPosition();
 		}
 	}
 }

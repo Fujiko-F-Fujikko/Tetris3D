@@ -49,13 +49,12 @@ public:
     void StopSoftDrop();   // Sキーを離したときの処理
     void HardDrop();       // Wキーを押したときの処理
 
-    int32 GetRotationIndex() const;
-
     TArray<FVector2D> GetBlockCells() const;
 	TMap<FVector2D, UStaticMeshComponent*> GetCellMeshMap() const;
 
     void UpdateCellPosition(const TArray<int32>& ClearedLines);
     void RemoveCell(FVector2D Cell);
+
 
 private:
     bool bIsLocked = false;  // ブロックが固定されたかどうか
@@ -65,4 +64,15 @@ private:
 
     TArray<FVector> WallKickOffsets;  // 壁キック用のオフセット
 
+    UPROPERTY()
+    TMap<FVector2D, UStaticMeshComponent*> GhostBlockMeshes; // ゴーストブロックの各セル用マップ
+    UPROPERTY()
+    TSoftObjectPtr<UMaterial> GhostMaterial; // ゴーストブロック用のマテリアル
+	UPROPERTY()
+	TSoftObjectPtr<UStaticMesh> GhostMesh; // ブロックのメッシュアセット
+
+    bool IsGhostMesh(UStaticMeshComponent* MeshComp) const;
+	void InitializeGhostBlocks(); // ゴーストブロックの初期化
+    void UpdateGhostPosition(); // ゴーストブロックの位置更新
+	void ClearGhostBlocks(); // ゴーストブロックの削除
 };
